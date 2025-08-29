@@ -60,28 +60,26 @@ def aguardar_e_renomear_download(download_dir, cdm, timeout=60):
         arquivos_atuais = set(os.listdir(download_dir))
         novos_arquivos = arquivos_atuais - arquivos_antes
         for nome in novos_arquivos:
-            if nome.endswith(".pdf") and not nome.endswith(".crdownload"):
+            if nome.endswith(".crdownload"):
+                continue  # Download ainda em andamento
+            if nome.endswith(".pdf"):
                 antigo_caminho = os.path.join(download_dir, nome)
                 novo_caminho = os.path.join(download_dir, f"{cdm}_folheto.pdf")
                 shutil.move(antigo_caminho, novo_caminho)
-                print(f"  - PDF renomeado para {novo_caminho}")
                 return True
         time.sleep(0.5)
-
-    print(f"  - Timeout: PDF do CDM {cdm} não encontrado")
     return False
-
 
 
 def processar_cdms_individualmente(cdms_info):
     """
-    Para cada CDM, acessar a página de pesquisa do Infarmed, preencher o CDM,
-    pesquisar, abrir modal de detalhes, extrair informações e baixar folheto.
-    Espera download terminar antes de fechar modal.
+    Para cada CDM:
+    - Preencher pesquisa, abrir modal, extrair dados
+    - Baixar folheto informativo, esperar download terminar
+    - Fechar modal
     """
     driver = iniciar_chrome()
-    wait = WebDriverWait(driver, 20)
-    DOWNLOAD_DIR = os.getcwd()
+    wait = WebDriverWait(driver, 30)
 
     try:
         driver.get("https://www.infarmed.pt/web/infarmed/pesquisa-dispositivos")
@@ -130,16 +128,20 @@ def processar_cdms_individualmente(cdms_info):
                     except:
                         info[campo] = None
 
-                print(f"  - Dados extraídos para CDM {cdm}: {info}")
-
                 # Baixar folheto informativo
+                info["Folheto_Baixado"] = False
                 try:
                     folheto_icon = modal.find_element(By.CSS_SELECTOR,
                         "span.icon-download-alt[title='Folheto Informativo']")
                     driver.execute_script("arguments[0].click();", folheto_icon)
                     print(f"  - Folheto iniciado para CDM {cdm}")
+
                     # Esperar download terminar e renomear
-                    aguardar_e_renomear_download(DOWNLOAD_DIR, cdm)
+                    if aguardar_e_renomear_download(DOWNLOAD_DIR, cdm):
+                        info["Folheto_Baixado"] = True
+                        print(f"  - PDF renomeado para {cdm}_folheto.pdf")
+                    else:
+                        print(f"  - Timeout: PDF do CDM {cdm} não encontrado")
                 except:
                     print(f"  - Folheto não encontrado para CDM {cdm}")
 
@@ -149,7 +151,9 @@ def processar_cdms_individualmente(cdms_info):
                         (By.CSS_SELECTOR, "a.ui-dialog-titlebar-close")
                     ))
                     driver.execute_script("arguments[0].click();", botao_fechar)
-                    wait.until(EC.invisibility_of_element(botao_fechar))
+                    wait.until(EC.invisibility_of_element_located(
+                        (By.ID, "_SIDMPesquisaDispositivos_WAR_SIDMportlet_:detalheForm:detalheDialog")
+                    ))
                     print(f"  - Modal fechado para CDM {cdm}")
                 except TimeoutException:
                     print(f"  - Não foi possível fechar o modal para CDM {cdm}")
