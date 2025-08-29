@@ -1,10 +1,12 @@
 import os
 import time
+import shutil
 import pandas as pd
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
+from selenium.webdriver.common.action_chains import ActionChains
 
 from _utils import iniciar_chrome, digitar_simulado, aguardar_download
 
@@ -46,13 +48,40 @@ def ler_cdms_excel(caminho_xlsx):
     return cdms
 
 
+def aguardar_e_renomear_download(download_dir, cdm, timeout=60):
+    """
+    Aguarda pelo download terminar e renomeia para {CDM}_folheto.pdf.
+    Detecta o arquivo novo na pasta de downloads.
+    """
+    fim = time.time() + timeout
+    arquivos_antes = set(os.listdir(download_dir))
+
+    while time.time() < fim:
+        arquivos_atuais = set(os.listdir(download_dir))
+        novos_arquivos = arquivos_atuais - arquivos_antes
+        for nome in novos_arquivos:
+            if nome.endswith(".pdf") and not nome.endswith(".crdownload"):
+                antigo_caminho = os.path.join(download_dir, nome)
+                novo_caminho = os.path.join(download_dir, f"{cdm}_folheto.pdf")
+                shutil.move(antigo_caminho, novo_caminho)
+                print(f"  - PDF renomeado para {novo_caminho}")
+                return True
+        time.sleep(0.5)
+
+    print(f"  - Timeout: PDF do CDM {cdm} não encontrado")
+    return False
+
+
+
 def processar_cdms_individualmente(cdms_info):
     """
     Para cada CDM, acessar a página de pesquisa do Infarmed, preencher o CDM,
-    pesquisar e abrir diretamente o modal de detalhes, ignorando a tabela.
+    pesquisar, abrir modal de detalhes, extrair informações e baixar folheto.
+    Espera download terminar antes de fechar modal.
     """
     driver = iniciar_chrome()
     wait = WebDriverWait(driver, 20)
+    DOWNLOAD_DIR = os.getcwd()
 
     try:
         driver.get("https://www.infarmed.pt/web/infarmed/pesquisa-dispositivos")
@@ -62,36 +91,33 @@ def processar_cdms_individualmente(cdms_info):
             print(f"[{idx}/{len(cdms_info)}] Processando CDM: {cdm}")
 
             try:
-                # 1. Campo de pesquisa
+                # Campo de pesquisa
                 cdm_input = wait.until(EC.presence_of_element_located(
                     (By.ID, "_SIDMPesquisaDispositivos_WAR_SIDMportlet_:pesquisaForm:infarmed5_input")
                 ))
                 cdm_input.clear()
                 digitar_simulado(cdm_input, cdm)
-                time.sleep(0.2)
 
-                # 2. Botão de pesquisar
+                # Botão pesquisar
                 search_btn = wait.until(EC.element_to_be_clickable(
                     (By.ID, "_SIDMPesquisaDispositivos_WAR_SIDMportlet_:pesquisaForm:pesquisarBtn")
                 ))
                 driver.execute_script("arguments[0].click();", search_btn)
                 print("  - Pesquisa realizada")
 
-                # 3. Esperar pelo ícone de detalhes do CDM (div.icon-file-alt) de forma confiável
+                # Ícone de detalhes
                 detalhes_icon = wait.until(EC.element_to_be_clickable(
                     (By.CSS_SELECTOR, "div.icon-file-alt[title='Detalhes']")
                 ))
-                driver.execute_script("arguments[0].scrollIntoView(true);", detalhes_icon)
                 driver.execute_script("arguments[0].click();", detalhes_icon)
                 print("  - Modal de detalhes aberto")
 
-                # 4. Aguardar modal carregar
+                # Modal
                 modal = wait.until(EC.visibility_of_element_located(
                     (By.ID, "_SIDMPesquisaDispositivos_WAR_SIDMportlet_:detalheForm:detalheDialog")
                 ))
-                time.sleep(0.2)
 
-                # 5. Extrair campos do modal
+                # Extrair campos
                 campos = [
                     "CDM", "Referência", "Designação/Nome Comercial", "Tipo de Dispositivo",
                     "Marca", "Modelo", "Classe", "Família", "Estado de Comercialização",
@@ -106,16 +132,30 @@ def processar_cdms_individualmente(cdms_info):
 
                 print(f"  - Dados extraídos para CDM {cdm}: {info}")
 
-            except TimeoutException:
-                print(f"  - CDM {cdm} não encontrado ou modal não abriu.")
+                # Baixar folheto informativo
+                try:
+                    folheto_icon = modal.find_element(By.CSS_SELECTOR,
+                        "span.icon-download-alt[title='Folheto Informativo']")
+                    driver.execute_script("arguments[0].click();", folheto_icon)
+                    print(f"  - Folheto iniciado para CDM {cdm}")
+                    # Esperar download terminar e renomear
+                    aguardar_e_renomear_download(DOWNLOAD_DIR, cdm)
+                except:
+                    print(f"  - Folheto não encontrado para CDM {cdm}")
 
-            # 6. Fechar modal antes de ir para próximo CDM
-            try:
-                close_btn = modal.find_element(By.CSS_SELECTOR, "a.ui-dialog-titlebar-icon.ui-dialog-titlebar-close")
-                driver.execute_script("arguments[0].click();", close_btn)
-                time.sleep(0.2)
-            except:
-                pass
+                # Fechar modal
+                try:
+                    botao_fechar = wait.until(EC.element_to_be_clickable(
+                        (By.CSS_SELECTOR, "a.ui-dialog-titlebar-close")
+                    ))
+                    driver.execute_script("arguments[0].click();", botao_fechar)
+                    wait.until(EC.invisibility_of_element(botao_fechar))
+                    print(f"  - Modal fechado para CDM {cdm}")
+                except TimeoutException:
+                    print(f"  - Não foi possível fechar o modal para CDM {cdm}")
+
+            except TimeoutException:
+                print(f"  - CDM {cdm} não encontrado ou sem resultados.")
 
     finally:
         driver.quit()
