@@ -68,27 +68,28 @@ def processar_cdms_individualmente(cdms_info):
                 ))
                 cdm_input.clear()
                 digitar_simulado(cdm_input, cdm)
+                time.sleep(0.2)
 
-                # 2. Clicar no botão de pesquisar
+                # 2. Botão de pesquisar
                 search_btn = wait.until(EC.element_to_be_clickable(
                     (By.ID, "_SIDMPesquisaDispositivos_WAR_SIDMportlet_:pesquisaForm:pesquisarBtn")
                 ))
                 driver.execute_script("arguments[0].click();", search_btn)
                 print("  - Pesquisa realizada")
 
-                # 3. Tentar abrir modal diretamente via ícone de detalhes (ignorando a tabela)
-                # Espera o ícone de detalhes aparecer (div.icon-file-alt)
+                # 3. Esperar pelo ícone de detalhes do CDM (div.icon-file-alt) de forma confiável
                 detalhes_icon = wait.until(EC.element_to_be_clickable(
                     (By.CSS_SELECTOR, "div.icon-file-alt[title='Detalhes']")
                 ))
+                driver.execute_script("arguments[0].scrollIntoView(true);", detalhes_icon)
                 driver.execute_script("arguments[0].click();", detalhes_icon)
                 print("  - Modal de detalhes aberto")
 
-                # 4. Esperar o modal carregar
+                # 4. Aguardar modal carregar
                 modal = wait.until(EC.visibility_of_element_located(
                     (By.ID, "_SIDMPesquisaDispositivos_WAR_SIDMportlet_:detalheForm:detalheDialog")
                 ))
-                print("  - Modal visível, extraindo dados")
+                time.sleep(0.2)
 
                 # 5. Extrair campos do modal
                 campos = [
@@ -106,7 +107,15 @@ def processar_cdms_individualmente(cdms_info):
                 print(f"  - Dados extraídos para CDM {cdm}: {info}")
 
             except TimeoutException:
-                print(f"  - CDM {cdm} não encontrado ou sem resultados.")
+                print(f"  - CDM {cdm} não encontrado ou modal não abriu.")
+
+            # 6. Fechar modal antes de ir para próximo CDM
+            try:
+                close_btn = modal.find_element(By.CSS_SELECTOR, "a.ui-dialog-titlebar-icon.ui-dialog-titlebar-close")
+                driver.execute_script("arguments[0].click();", close_btn)
+                time.sleep(0.2)
+            except:
+                pass
 
     finally:
         driver.quit()
