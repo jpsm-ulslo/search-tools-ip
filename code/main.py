@@ -1,5 +1,5 @@
 from _utils import iniciar_chrome, pesquisar_npdm_e_exportar
-from _test import ler_cdms_excel, processar_cdms_individualmente
+from _test import ler_cdms_excel, processar_cdms_individualmente, distribuidores_ativos
 import os
 
 def main():
@@ -7,7 +7,7 @@ def main():
     print("Abrindo Chrome...")
     driver = iniciar_chrome()
     
-    if False:
+    if True:
         try:
             # Etapa 1: Pesquisar NPDM e exportar resultados
             arquivo_resultado = pesquisar_npdm_e_exportar(driver, npdm)
@@ -25,9 +25,11 @@ def main():
     # Etapa 2: Processar arquivo exportado
     if arquivo_resultado and os.path.exists(arquivo_resultado):
         try:
+            distribuidores = distribuidores_ativos(arquivo_resultado, verbose=True)
+            print(distribuidores)   
             cdms_info = ler_cdms_excel(arquivo_resultado)
             print(f"{len(cdms_info)} CDMs Comercializados encontrados.")
-            processar_cdms_individualmente(cdms_info)
+            processar_cdms_individualmente(cdms_info, relatorio_path="relatorio_final.xlsx")
         except Exception as e:
             print(f"Erro durante o processamento dos CDMs: {e}")
         finally:
