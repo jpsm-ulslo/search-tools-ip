@@ -30,7 +30,6 @@ handle.close()
 pmid_list = record["IdList"]
 pubmed_total = int(record["Count"])
 duplicates = 0  # adjust if needed
-
 screened = pubmed_total - duplicates
 excluded_screening = 0
 full_text = 0
@@ -80,13 +79,13 @@ if pmid_list:
 # ----------------------------
 with open("references.bib", "w", encoding="utf-8") as f:
     for rec in records_data:
-        f.write("@article{" + rec['key'] + ",\n")
-        f.write("  author = {" + " and ".join(rec['authors']) + "},\n")
-        f.write("  title = {" + rec['title'] + "},\n")
-        f.write("  journal = {PubMed},\n")
-        f.write("  year = {" + rec['year'] + "},\n")
+        f.write(f"@article{{{{{rec['key']}}}}},\n")
+        f.write(f"  author = {{{' and '.join(rec['authors'])}}},\n")
+        f.write(f"  title = {{{rec['title']}}},\n")
+        f.write(f"  journal = {{PubMed}},\n")
+        f.write(f"  year = {{{rec['year']}}},\n")
         if rec['doi']:
-            f.write("  doi = {" + rec['doi'] + "},\n")
+            f.write(f"  doi = {{{rec['doi']}}},\n")
         f.write("}\n\n")
 
 # ----------------------------
@@ -121,10 +120,28 @@ Summarize international guidelines, consensus statements, and related literature
 \\section*{{Methodological Approach}}
 \\begin{{itemize}}
     \\item \\textbf{{Databases:}} PubMed (primary), supplemented by Google Scholar and society websites
-    \\item \\textbf{{Time frame:}} 2015--2025
+    \\item \\textbf{{Time frame:}} {date_from} -- {date_to}
     \\item \\textbf{{PubMed search string:}} \\texttt{{{query}}}
     \\item \\textbf{{Screening and inclusion/exclusion:}} See PRISMA diagram
 \\end{{itemize}}
+
+\\section*{{PRISMA Flow Diagram (PubMed 2015--2025)}}
+\\begin{{tikzpicture}}[node distance=1.5cm, auto]
+\\tikzstyle{{block}} = [rectangle, draw, text width=10cm, align=center, rounded corners, minimum height=1.2cm]
+
+\\node[block] (id) {{Records identified from PubMed: {pubmed_total}}};
+\\node[block, below=of id] (dup) {{Duplicates removed: {duplicates} \\\\ Records screened: {screened}}};
+\\node[block, below=of dup] (exc) {{Excluded after screening: {excluded_screening}}};
+\\node[block, below=of exc] (elig) {{Full-text assessed: {full_text}}};
+\\node[block, below=of elig] (exc2) {{Excluded after full-text: {excluded_fulltext}}};
+\\node[block, below=of exc2] (inc) {{Included in synthesis: {included}}};
+
+\\draw[->] (id) -- (dup);
+\\draw[->] (dup) -- (exc);
+\\draw[->] (exc) -- (elig);
+\\draw[->] (elig) -- (exc2);
+\\draw[->] (exc2) -- (inc);
+\\end{{tikzpicture}}
 
 \\section*{{Synthesized Evidence Table}}
 \\footnotesize
