@@ -1,6 +1,4 @@
 from Bio import Entrez, Medline
-import datetime
-import re
 
 # ----------------------------
 # 1. NCBI / Entrez setup
@@ -14,12 +12,14 @@ date_to = "2025/12/31"
 # ----------------------------
 # 2. Search PubMed
 # ----------------------------
-handle = Entrez.esearch(db="pubmed",
-                        term=query,
-                        mindate=date_from,
-                        maxdate=date_to,
-                        datetype="pdat",
-                        retmax=1000)
+handle = Entrez.esearch(
+    db="pubmed",
+    term=query,
+    mindate=date_from,
+    maxdate=date_to,
+    datetype="pdat",
+    retmax=1000
+)
 record = Entrez.read(handle)
 handle.close()
 
@@ -28,7 +28,7 @@ pubmed_total = int(record["Count"])
 duplicates = 0  # adjust if needed
 
 screened = pubmed_total - duplicates
-excluded_screening = 0  # placeholder
+excluded_screening = 0
 full_text = 0
 excluded_fulltext = 0
 included = 0
@@ -37,7 +37,7 @@ print(f"PubMed total: {pubmed_total}")
 print(f"PMIDs: {pmid_list}")
 
 # ----------------------------
-# 3. Fetch metadata (title, abstract, DOI)
+# 3. Fetch metadata
 # ----------------------------
 records_data = []
 
@@ -47,7 +47,6 @@ if pmid_list:
     for r in records:
         title = r.get("TI", "")
         abstract = r.get("AB", "")
-        journal = r.get("JT", "PubMed")
         doi_list = r.get("AID", [])
         doi = ""
         if doi_list:
@@ -57,12 +56,10 @@ if pmid_list:
                     break
         authors = r.get("AU", [])
         year = r.get("DP", "").split(" ")[0]
-        # create a safe bibkey
         if authors:
-            first_author = re.sub(r'\W+', '', authors[0].split()[-1])[:5]
+            key = authors[0].split()[-1][:3] + year  # first author + year
         else:
-            first_author = "Anon"
-        key = f"{first_author}{year}"
+            key = "Ref" + year
         records_data.append({
             "pmid": r.get("PMID", ""),
             "title": title,
@@ -70,41 +67,46 @@ if pmid_list:
             "doi": doi,
             "authors": authors,
             "year": year,
-            "journal": journal,
             "key": key
         })
     handle.close()
 
 # ----------------------------
-# 4. Write references.bib
+# 4. Write .bib file (corrected)
 # ----------------------------
 with open("references.bib", "w", encoding="utf-8") as f:
     for rec in records_data:
         f.write(f"@article{{{rec['key']}}},\n")
         f.write(f"  author = {{{' and '.join(rec['authors'])}}},\n")
         f.write(f"  title = {{{rec['title']}}},\n")
-        f.write(f"  journal = {{{rec['journal']}}},\n")
+        f.write(f"  journal = {{PubMed}},\n")
         f.write(f"  year = {{{rec['year']}}},\n")
         if rec['doi']:
             f.write(f"  doi = {{{rec['doi']}}},\n")
         f.write("}\n\n")
 
 # ----------------------------
-# 5. Generate LaTeX with PRISMA diagram and BibTeX-referenced table
+# 5. Generate LaTeX file
 # ----------------------------
 latex_content = f"""
 \\documentclass[12pt,a4paper]{{article}}
 \\usepackage[utf8]{{inputenc}}
 \\usepackage{{geometry}}
 \\usepackage{{array}}
+\\usepackage[hyphens]{{url}}
 \\usepackage{{hyperref}}
+\\usepackage[backend=biber,style=numeric,sorting=ynt]{{biblatex}}
 \\usepackage{{longtable}}
 \\usepackage{{tikz}}
+\\usepackage{{microtype}}
 \\usetikzlibrary{{positioning}}
 
 \\geometry{{top=0.8in, bottom=0.8in, left=0.7in, right=0.7in}}
 
+\\addbibresource{{references.bib}}
+
 \\title{{Systematic Evidence on Indirect Calorimetry for Resting Energy Expenditure (2015--2025)}}
+\\author{{Automated Systematic Search (Entrez API)}}
 \\date{{\\today}}
 
 \\begin{{document}}
@@ -139,11 +141,11 @@ Summarize international guidelines, consensus statements, and related literature
 \\draw[->] (exc2) -- (inc);
 \\end{{tikzpicture}}
 
-\\section*{{Synthesized Evidence Table (Page-width, BibTeX References)}}
+\\section*{{Synthesized Evidence Table (Linked BibTeX References)}}
 \\footnotesize
 \\setlength{{\\extrarowheight}}{{2pt}}
 
-\\begin{{longtable}}{{|p{{2.8cm}}|c|p{{7cm}}|p{{2cm}}|}}
+\\begin{{longtable}}{{|p{{3cm}}|c|p{{8cm}}|c|}}
 \\hline
 Authors & Year & Title & Ref \\\\
 \\hline
@@ -158,35 +160,29 @@ Authors & Year & Title & Ref \\\\
 \\endlastfoot
 """
 
+# Add table rows with \cite{}
 for rec in records_data:
     authors = ", ".join(rec["authors"][:3]) + (" et al." if len(rec["authors"]) > 3 else "")
-    latex_content += f"{authors} & {rec['year']} & {rec['title']} & \\\\cite{{{rec['key']}}} \\\\\n"
+    latex_content += f"{authors} & {rec['year']} & {rec['title']} & \\cite{{{rec['key']}}} \\\\\n"
 
-latex_content += r"""
-\end{longtable}
+latex_content += """
+\\end{longtable}
 
-\section*{Transparency and Reproducibility}
-\begin{itemize}
-    \item All sources retrieved from PubMed via Entrez API
-    \item Data extracted from abstracts, titles, and verified DOIs
-    \item Only peer-reviewed, English-language sources included
-    \item Fully reproducible following the described search strategy
-    \item Bibliography managed via references.bib
-\end{itemize}
+\\section*{Transparency and Reproducibility}
+\\begin{itemize}
+    \\item All sources retrieved from PubMed via Entrez API
+    \\item Data extracted from abstracts, titles, and verified DOIs
+    \\item Only peer-reviewed, English-language sources included
+    \\item Fully reproducible following the described search strategy
+    \\item Bibliography managed via references.bib
+\\end{itemize}
 
-\bibliographystyle{plain}
-\bibliography{references}
+\\printbibliography
 
-\end{document}
+\\end{document}
 """
 
-# Write LaTeX file
 with open("systematic_review.tex", "w", encoding="utf-8") as f:
     f.write(latex_content)
 
-print("✅ LaTeX file 'systematic_review.tex' and BibTeX 'references.bib' generated successfully!")
-print("➡ Run the following to compile:")
-print("   pdflatex systematic_review")
-print("   bibtex systematic_review")
-print("   pdflatex systematic_review")
-print("   pdflatex systematic_review")
+print("LaTeX file 'systematic_review.tex' and BibTeX 'references.bib' generated successfully!")
