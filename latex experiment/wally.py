@@ -25,8 +25,7 @@ handle.close()
 
 pmid_list = record["IdList"]
 pubmed_total = int(record["Count"])
-duplicates = 0  # adjust if needed
-
+duplicates = 0
 screened = pubmed_total - duplicates
 excluded_screening = 0
 full_text = 0
@@ -34,7 +33,6 @@ excluded_fulltext = 0
 included = 0
 
 print(f"PubMed total: {pubmed_total}")
-print(f"PMIDs: {pmid_list}")
 
 # ----------------------------
 # 3. Fetch metadata
@@ -56,10 +54,7 @@ if pmid_list:
                     break
         authors = r.get("AU", [])
         year = r.get("DP", "").split(" ")[0]
-        if authors:
-            key = authors[0].split()[-1][:3] + year  # first author + year
-        else:
-            key = "Ref" + year
+        key = (authors[0].split()[-1][:3] if authors else "Ref") + year
         records_data.append({
             "pmid": r.get("PMID", ""),
             "title": title,
@@ -72,11 +67,11 @@ if pmid_list:
     handle.close()
 
 # ----------------------------
-# 4. Write .bib file (corrected)
+# 4. Write .bib file
 # ----------------------------
 with open("references.bib", "w", encoding="utf-8") as f:
     for rec in records_data:
-        f.write(f"@article{{{rec['key']}}},\n")
+        f.write(f"@article{{{rec['key']},\n")
         f.write(f"  author = {{{' and '.join(rec['authors'])}}},\n")
         f.write(f"  title = {{{rec['title']}}},\n")
         f.write(f"  journal = {{PubMed}},\n")
@@ -93,7 +88,6 @@ latex_content = f"""
 \\usepackage[utf8]{{inputenc}}
 \\usepackage{{geometry}}
 \\usepackage{{array}}
-\\usepackage[hyphens]{{url}}
 \\usepackage{{hyperref}}
 \\usepackage[backend=biber,style=numeric,sorting=ynt]{{biblatex}}
 \\usepackage{{longtable}}
@@ -102,7 +96,6 @@ latex_content = f"""
 \\usetikzlibrary{{positioning}}
 
 \\geometry{{top=0.8in, bottom=0.8in, left=0.7in, right=0.7in}}
-
 \\addbibresource{{references.bib}}
 
 \\title{{Systematic Evidence on Indirect Calorimetry for Resting Energy Expenditure (2015--2025)}}
@@ -113,27 +106,25 @@ latex_content = f"""
 \\maketitle
 
 \\section*{{Objective}}
-Summarize international guidelines, consensus statements, and related literature (2015--2025) regarding the use \\textbf{{indirect calorimetry (IC)}} to determine \\textbf{{resting energy expenditure (REE)}} in ventilated and non-ventilated adult patients.
+Summarize international guidelines, consensus statements, and related literature (2015--2025) regarding the use \\textbf{{indirect calorimetry (IC)}} to determine \\textbf{{resting energy expenditure (REE)}}.
 
 \\section*{{Methodological Approach}}
 \\begin{{itemize}}
-    \\item \\textbf{{Databases:}} PubMed (primary), supplemented by Google Scholar and society websites (ESPEN, ASPEN, SCCM, ESICM)
+    \\item \\textbf{{Databases:}} PubMed (primary)
     \\item \\textbf{{Time frame:}} 2015--2025
     \\item \\textbf{{PubMed search string:}} \\texttt{{{query}}}
     \\item \\textbf{{Screening and inclusion/exclusion:}} See PRISMA diagram
 \\end{{itemize}}
 
-\\section*{{PRISMA Flow Diagram (PubMed 2015--2025)}}
+\\section*{{PRISMA Flow Diagram}}
 \\begin{{tikzpicture}}[node distance=1.5cm, auto]
 \\tikzstyle{{block}} = [rectangle, draw, text width=10cm, align=center, rounded corners, minimum height=1.2cm]
-
 \\node[block] (id) {{Records identified from PubMed: {pubmed_total}}};
 \\node[block, below=of id] (dup) {{Duplicates removed: {duplicates} \\\\ Records screened: {screened}}};
 \\node[block, below=of dup] (exc) {{Excluded after screening: {excluded_screening}}};
 \\node[block, below=of exc] (elig) {{Full-text assessed: {full_text}}};
 \\node[block, below=of elig] (exc2) {{Excluded after full-text: {excluded_fulltext}}};
 \\node[block, below=of exc2] (inc) {{Included in synthesis: {included}}};
-
 \\draw[->] (id) -- (dup);
 \\draw[->] (dup) -- (exc);
 \\draw[->] (exc) -- (elig);
@@ -141,10 +132,9 @@ Summarize international guidelines, consensus statements, and related literature
 \\draw[->] (exc2) -- (inc);
 \\end{{tikzpicture}}
 
-\\section*{{Synthesized Evidence Table (Linked BibTeX References)}}
+\\section*{{Synthesized Evidence Table}}
 \\footnotesize
 \\setlength{{\\extrarowheight}}{{2pt}}
-
 \\begin{{longtable}}{{|p{{3cm}}|c|p{{8cm}}|c|}}
 \\hline
 Authors & Year & Title & Ref \\\\
@@ -160,10 +150,13 @@ Authors & Year & Title & Ref \\\\
 \\endlastfoot
 """
 
-# Add table rows with \cite{}
+# Add rows with clickable DOI links
 for rec in records_data:
     authors = ", ".join(rec["authors"][:3]) + (" et al." if len(rec["authors"]) > 3 else "")
-    latex_content += f"{authors} & {rec['year']} & {rec['title']} & \\cite{{{rec['key']}}} \\\\\n"
+    if rec['doi']:
+        latex_content += f"{authors} & {rec['year']} & {rec['title']} & \\href{{https://doi.org/{rec['doi']}}}{{\\cite{{{rec['key']}}}}} \\\\\n"
+    else:
+        latex_content += f"{authors} & {rec['year']} & {rec['title']} & \\cite{{{rec['key']}}} \\\\\n"
 
 latex_content += """
 \\end{longtable}
@@ -172,17 +165,15 @@ latex_content += """
 \\begin{itemize}
     \\item All sources retrieved from PubMed via Entrez API
     \\item Data extracted from abstracts, titles, and verified DOIs
-    \\item Only peer-reviewed, English-language sources included
     \\item Fully reproducible following the described search strategy
     \\item Bibliography managed via references.bib
 \\end{itemize}
 
 \\printbibliography
-
 \\end{document}
 """
 
 with open("systematic_review.tex", "w", encoding="utf-8") as f:
     f.write(latex_content)
 
-print("LaTeX file 'systematic_review.tex' and BibTeX 'references.bib' generated successfully!")
+print("LaTeX and BibTeX files generated successfully!")
