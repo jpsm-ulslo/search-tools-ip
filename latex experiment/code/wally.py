@@ -13,7 +13,7 @@ date_to = "2025/12/31"
 # ----------------------------
 # 2. NCBI / Entrez setup
 # ----------------------------
-Entrez.email = "your.email@example.com"  # Replace with your email
+Entrez.email = "your.email@example.com"  # Replace with your actual email
 
 # ----------------------------
 # 3. Search PubMed
@@ -31,7 +31,7 @@ handle.close()
 
 pmid_list = record["IdList"]
 pubmed_total = int(record["Count"])
-duplicates = 0  # adjust if needed
+duplicates = 0
 screened = pubmed_total - duplicates
 excluded_screening = 0
 full_text = 0
@@ -51,7 +51,6 @@ if pmid_list:
     records = Medline.parse(handle)
     for r in records:
         title = r.get("TI", "")
-        abstract = r.get("AB", "")
         doi_list = r.get("AID", [])
         doi = ""
         if doi_list:
@@ -60,12 +59,18 @@ if pmid_list:
                     doi = d.replace("[doi]", "").strip()
                     break
         authors = r.get("AU", [])
+        # Use et al. truncation (first 3 authors only)
+        if len(authors) > 3:
+            formatted_authors = ", ".join(authors[:3]) + " et al."
+        else:
+            formatted_authors = ", ".join(authors)
+
         year = r.get("DP", "").split(" ")[0]
         key = (authors[0].split()[-1][:3] + year) if authors else "Ref" + year
         records_data.append({
-            "PMID": r.get("PMID", ""),
+            "PMID": str(r.get("PMID", "")),
             "Title": title,
-            "Authors": ", ".join(authors),
+            "Authors": formatted_authors,
             "Year": year,
             "DOI": doi,
             "Key": key
@@ -87,17 +92,17 @@ with open("references.bib", "w", encoding="utf-8") as f:
         f.write("}\n\n")
 
 # ----------------------------
-# 6. Save CSV/JSON for Excel with Include handling
+# 6. Save CSV/JSON for Excel with Include column preserved
 # ----------------------------
 records_df_new = pd.DataFrame(records_data)
-records_csv_path = "records.csv"
-records_json_path = "records.json"
+csv_path = "records.csv"
+json_path = "records.json"
 
-if os.path.exists(records_csv_path):
-    # Read existing CSV (Include column preserved)
-    records_df_old = pd.read_csv(records_csv_path, sep=";", encoding="utf-8", dtype={"PMID": str})
+if os.path.exists(csv_path):
+    # Read previous version to preserve Include column
+    records_df_old = pd.read_csv(csv_path, sep=";", encoding="utf-8", dtype={"PMID": str})
     records_df_new["PMID"] = records_df_new["PMID"].astype(str)
-    # Merge Include column from old CSV
+
     if "Include" in records_df_old.columns:
         records_df = pd.merge(
             records_df_new,
@@ -110,13 +115,11 @@ if os.path.exists(records_csv_path):
         records_df = records_df_new.copy()
         records_df.insert(0, "Include", 0)
 else:
-    # First run
     records_df = records_df_new.copy()
     records_df.insert(0, "Include", 0)
 
-# Save updated CSV and JSON
-records_df.to_csv(records_csv_path, index=False, sep=";", encoding="utf-8")
-records_df.to_json(records_json_path, orient="records", force_ascii=False)
+records_df.to_csv(csv_path, index=False, sep=";", encoding="utf-8")
+records_df.to_json(json_path, orient="records", force_ascii=False)
 
 # ----------------------------
 # 7. PRISMA counts
@@ -125,7 +128,7 @@ included = records_df["Include"].sum()
 excluded_fulltext = len(records_df) - included
 
 # ----------------------------
-# 8. Generate LaTeX
+# 8. Generate LaTeX report
 # ----------------------------
 latex_content = f"""
 \\documentclass[12pt,a4paper]{{article}}
@@ -137,10 +140,10 @@ latex_content = f"""
 \\usepackage{{longtable}}
 \\usepackage{{tikz}}
 \\usepackage{{microtype}}
+\\usepackage{{ragged2e}}
 \\usetikzlibrary{{positioning}}
 
 \\geometry{{top=0.8in, bottom=0.8in, left=0.7in, right=0.7in}}
-
 \\addbibresource{{references.bib}}
 
 \\title{{Systematic Evidence on {search_topic} (2015--2025)}}
@@ -151,17 +154,17 @@ latex_content = f"""
 \\maketitle
 
 \\section*{{Objective}}
-Summarize international guidelines, consensus statements, and related literature (2015--2025) regarding the use \\textbf{{{search_topic}}}.
+Summarize international guidelines, consensus statements, and related literature (2015--2025) regarding \\textbf{{{search_topic}}}.
 
 \\section*{{Methodological Approach}}
 \\begin{{itemize}}
-    \\item \\textbf{{Databases:}} PubMed (primary), supplemented by Google Scholar and society websites
+    \\item \\textbf{{Database:}} PubMed (primary)
     \\item \\textbf{{Time frame:}} {date_from} -- {date_to}
-    \\item \\textbf{{PubMed search string:}} \\texttt{{{query}}}
-    \\item \\textbf{{Screening and inclusion/exclusion:}} See PRISMA diagram
+    \\item \\textbf{{Query:}} \\texttt{{{query}}}
+    \\item \\textbf{{Screening:}} See PRISMA diagram
 \\end{{itemize}}
 
-\\section*{{PRISMA Flow Diagram (PubMed 2015--2025)}}
+\\section*{{PRISMA Flow Diagram}}
 \\begin{{tikzpicture}}[node distance=1.5cm, auto]
 \\tikzstyle{{block}} = [rectangle, draw, text width=10cm, align=center, rounded corners, minimum height=1.2cm]
 
@@ -180,15 +183,16 @@ Summarize international guidelines, consensus statements, and related literature
 \\end{{tikzpicture}}
 
 \\section*{{Synthesized Evidence Table}}
+\\renewcommand{{\\arraystretch}}{{1.3}}
 \\footnotesize
 \\setlength{{\\extrarowheight}}{{2pt}}
-\\begin{{longtable}}{{|c|p{{3cm}}|c|p{{8cm}}|c|}}
+\\begin{{longtable}}{{|p{{1cm}}|p{{3.5cm}}|p{{1cm}}|p{{8cm}}|p{{1.5cm}}|}}
 \\hline
-Include & Authors & Year & Title & Ref \\\\
+\\textbf{{Inc}} & \\textbf{{Authors}} & \\textbf{{Year}} & \\textbf{{Title}} & \\textbf{{Ref}} \\\\
 \\hline
 \\endfirsthead
 \\hline
-Include & Authors & Year & Title & Ref \\\\
+\\textbf{{Inc}} & \\textbf{{Authors}} & \\textbf{{Year}} & \\textbf{{Title}} & \\textbf{{Ref}} \\\\
 \\hline
 \\endhead
 \\hline
@@ -198,28 +202,27 @@ Include & Authors & Year & Title & Ref \\\\
 """
 
 for _, rec in records_df.iterrows():
-    authors = rec["Authors"]
+    authors = rec["Authors"].replace("&", "\\&")
     doi_link = f"\\href{{https://doi.org/{rec['DOI']}}}{{{rec['Key']}}}" if rec["DOI"] else rec["Key"]
-    latex_content += f"{rec['Include']} & {authors} & {rec['Year']} & {rec['Title']} & {doi_link} \\\\\n"
+    latex_content += f"{rec['Include']} & \\RaggedRight {authors} & {rec['Year']} & \\RaggedRight {rec['Title']} & {doi_link} \\\\\n\\hline\n"
 
 latex_content += """
 \\end{longtable}
 
 \\section*{Transparency and Reproducibility}
 \\begin{itemize}
-    \\item All sources retrieved from PubMed via Entrez API
-    \\item Data extracted from abstracts, titles, and verified DOIs
-    \\item Only peer-reviewed, English-language sources included
-    \\item Fully reproducible following the described search strategy
+    \\item Author lists truncated to first 3 names followed by “et al.” for clarity.
+    \\item UTF-8 semicolon-delimited CSV compatible with Excel (Portuguese locale).
+    \\item Inclusion decisions persist across runs.
+    \\item PRISMA diagram updates automatically.
 \\end{itemize}
 
 \\printbibliography
-
 \\end{document}
 """
 
 with open("systematic_review.tex", "w", encoding="utf-8") as f:
     f.write(latex_content)
 
-print("LaTeX file 'systematic_review.tex' and BibTeX 'references.bib' generated successfully!")
-print("CSV and JSON records also updated (records.csv, records.json).")
+print("✅ LaTeX file 'systematic_review.tex' and BibTeX 'references.bib' generated successfully!")
+print("✅ CSV and JSON updated (records.csv, records.json).")
