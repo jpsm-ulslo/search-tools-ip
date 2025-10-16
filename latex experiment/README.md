@@ -17,8 +17,7 @@ Features:
 Installation:
 
 1. Clone the repository:
-   git clone https://github.com/your-username/repository-name.git
-   cd repository-name
+   https://github.com/jpsm-ulslo/search-tools-ip/
 2. Install Python dependencies:
    pip install biopython pandas
 
