@@ -1,5 +1,6 @@
-import pandas as pd
 from Bio import Entrez, Medline
+import pandas as pd
+import os
 
 # ----------------------------
 # 1. User-defined search setup
@@ -9,92 +10,102 @@ query = '"indirect calorimetry"[tiab] AND ("guideline"[tiab] OR "consensus"[tiab
 date_from = "2015/01/01"
 date_to = "2025/12/31"
 
+# ----------------------------
+# 2. NCBI / Entrez setup
+# ----------------------------
 Entrez.email = "your.email@example.com"  # Replace with your email
 
 # ----------------------------
-# 2. Search PubMed
+# 3. Search PubMed
 # ----------------------------
-handle = Entrez.esearch(db="pubmed", term=query, mindate=date_from, maxdate=date_to, datetype="pdat", retmax=1000)
+handle = Entrez.esearch(
+    db="pubmed",
+    term=query,
+    mindate=date_from,
+    maxdate=date_to,
+    datetype="pdat",
+    retmax=1000
+)
 record = Entrez.read(handle)
 handle.close()
 
 pmid_list = record["IdList"]
-pubmed_total = int(record["Count"])
+pubmed_total = len(pmid_list)
 duplicates = 0  # adjust if needed
+screened = pubmed_total - duplicates
+
+print(f"PubMed total: {pubmed_total}")
+print(f"PMIDs: {pmid_list}")
 
 # ----------------------------
-# 3. Fetch metadata
+# 4. Fetch metadata
 # ----------------------------
 records_data = []
+
 if pmid_list:
     handle = Entrez.efetch(db="pubmed", id=pmid_list, rettype="medline", retmode="text")
     records = Medline.parse(handle)
     for r in records:
         title = r.get("TI", "")
-        authors = r.get("AU", [])
-        year = r.get("DP", "").split(" ")[0]
+        abstract = r.get("AB", "")
         doi_list = r.get("AID", [])
         doi = ""
-        for d in doi_list:
-            if "[doi]" in d:
-                doi = d.replace("[doi]", "").strip()
-                break
-        key = authors[0].split()[-1][:3] + year if authors else "Ref" + year
+        if doi_list:
+            for d in doi_list:
+                if "[doi]" in d:
+                    doi = d.replace("[doi]", "").strip()
+                    break
+        authors = r.get("AU", [])
+        year = r.get("DP", "").split(" ")[0]
+        key = (authors[0].split()[-1][:3] + year) if authors else "Ref" + year
+
         records_data.append({
             "PMID": r.get("PMID", ""),
             "Title": title,
+            "Abstract": abstract,
+            "DOI": doi,
             "Authors": ", ".join(authors),
             "Year": year,
-            "DOI": doi,
             "Key": key,
-            "Include": 1  # default to include
+            "Include": 1  # default to included
         })
     handle.close()
 
 # ----------------------------
-# 4. Export to CSV for manual inclusion/exclusion
+# 5. Save records to CSV and JSON
 # ----------------------------
-df = pd.DataFrame(records_data)
-csv_file = "records.csv"
-
-# If CSV exists, load previous decisions
-try:
-    prev_df = pd.read_csv(csv_file)
-    # Keep previous Include decisions for matching keys
-    for idx, row in df.iterrows():
-        match = prev_df[prev_df['Key'] == row['Key']]
-        if not match.empty:
-            df.at[idx, 'Include'] = int(match.iloc[0]['Include'])
-except FileNotFoundError:
-    pass
-
-df.to_csv(csv_file, index=False, encoding="utf-8")
+records_df = pd.DataFrame(records_data)
+records_df.to_csv("records.csv", index=False, encoding="utf-8")
+records_df.to_json("records.json", orient="records", force_ascii=False)
 
 # ----------------------------
-# 5. Filter included papers for LaTeX
-# ----------------------------
-included_df = df[df['Include'] == 1]
-excluded_screening = pubmed_total - duplicates - len(included_df)
-full_text = len(included_df)  # for now, assume all included are full-text assessed
-excluded_fulltext = 0  # placeholder
-included_count = len(included_df)
-
-# ----------------------------
-# 6. Write BibTeX file
+# 6. Write BibTeX
 # ----------------------------
 with open("references.bib", "w", encoding="utf-8") as f:
-    for _, rec in included_df.iterrows():
-        f.write(f"@article{{{rec['Key']}},\n")
-        f.write(f"  author = {{{rec['Authors']}}},\n")
-        f.write(f"  title = {{{rec['Title']}}},\n")
-        f.write(f"  journal = {{PubMed}},\n")
-        f.write(f"  year = {{{rec['Year']}}},\n")
+    for rec in records_data:
+        f.write("@article{" + rec['Key'] + ",\n")
+        f.write("  author = {" + rec['Authors'] + "},\n")
+        f.write("  title = {" + rec['Title'] + "},\n")
+        f.write("  journal = {PubMed},\n")
+        f.write("  year = {" + rec['Year'] + "},\n")
         if rec['DOI']:
-            f.write(f"  doi = {{{rec['DOI']}}},\n")
+            f.write("  doi = {" + rec['DOI'] + "},\n")
         f.write("}\n\n")
 
 # ----------------------------
-# 7. Generate LaTeX report
+# 7. Read CSV for Include/Exclude
+# ----------------------------
+records_df = pd.read_csv("records.csv", encoding="utf-8")
+included_df = records_df[records_df["Include"] == 1]
+excluded_df = records_df[records_df["Include"] == 0]
+
+excluded_screening = len(excluded_df)
+full_text = len(included_df)
+excluded_fulltext = 0
+included_count = len(included_df)
+
+# ----------------------------
+# 8. Generate LaTeX report
 # ----------------------------
 latex_content = f"""
 \\documentclass[12pt,a4paper]{{article}}
@@ -109,10 +120,9 @@ latex_content = f"""
 \\usetikzlibrary{{positioning}}
 
 \\geometry{{top=0.8in, bottom=0.8in, left=0.7in, right=0.7in}}
-
 \\addbibresource{{references.bib}}
 
-\\title{{Systematic Evidence on {search_topic} (2015--2025)}}
+\\title{{Systematic Evidence on {search_topic} ({date_from}--{date_to})}}
 \\author{{Automated Systematic Search (Entrez API)}}
 \\date{{\\today}}
 
@@ -120,7 +130,7 @@ latex_content = f"""
 \\maketitle
 
 \\section*{{Objective}}
-Summarize international guidelines, consensus statements, and related literature (2015--2025) regarding the use \\textbf{{{search_topic}}}.
+Summarize international guidelines, consensus statements, and related literature regarding the use \\textbf{{{search_topic}}}.
 
 \\section*{{Methodological Approach}}
 \\begin{{itemize}}
@@ -135,7 +145,7 @@ Summarize international guidelines, consensus statements, and related literature
 \\tikzstyle{{block}} = [rectangle, draw, text width=10cm, align=center, rounded corners, minimum height=1.2cm]
 
 \\node[block] (id) {{Records identified from PubMed: {pubmed_total}}};
-\\node[block, below=of id] (dup) {{Duplicates removed: {duplicates} \\\\ Records screened: {pubmed_total - duplicates}}};
+\\node[block, below=of id] (dup) {{Duplicates removed: {duplicates} \\\\ Records screened: {screened}}};
 \\node[block, below=of dup] (exc) {{Excluded after screening: {excluded_screening}}};
 \\node[block, below=of exc] (elig) {{Full-text assessed: {full_text}}};
 \\node[block, below=of elig] (exc2) {{Excluded after full-text: {excluded_fulltext}}};
@@ -153,11 +163,11 @@ Summarize international guidelines, consensus statements, and related literature
 \\setlength{{\\extrarowheight}}{{2pt}}
 \\begin{{longtable}}{{|c|p{{3cm}}|c|p{{8cm}}|c|}}
 \\hline
-Decision & Authors & Year & Title & Ref \\\\
+Include & Authors & Year & Title & Ref \\\\
 \\hline
 \\endfirsthead
 \\hline
-Decision & Authors & Year & Title & Ref \\\\
+Include & Authors & Year & Title & Ref \\\\
 \\hline
 \\endhead
 \\hline
@@ -166,10 +176,11 @@ Decision & Authors & Year & Title & Ref \\\\
 \\endlastfoot
 """
 
-for _, rec in df.iterrows():
-    authors_short = ", ".join(rec["Authors"].split(", ")[:3]) + (" et al." if len(rec["Authors"].split(", ")) > 3 else "")
-    doi_link = f"\\href{{https://doi.org/{rec['DOI']}}}{{{rec['Key']}}}" if rec['DOI'] else rec['Key']
-    latex_content += f"{rec['Include']} & {authors_short} & {rec['Year']} & {rec['Title']} & {doi_link} \\\\\n"
+# Add included records to table with clickable DOI
+for _, rec in records_df.iterrows():
+    authors = ", ".join(rec["Authors"].split(", ")[:3]) + (" et al." if len(rec["Authors"].split(", ")) > 3 else "")
+    doi_link = f"\\href{{https://doi.org/{rec['DOI']}}}{{{rec['Key']}}}" if pd.notna(rec['DOI']) and rec['DOI'] else rec['Key']
+    latex_content += f"{rec['Include']} & {authors} & {rec['Year']} & {rec['Title']} & {doi_link} \\\\\n"
 
 latex_content += """
 \\end{longtable}
@@ -190,4 +201,5 @@ latex_content += """
 with open("systematic_review.tex", "w", encoding="utf-8") as f:
     f.write(latex_content)
 
-print("LaTeX file 'systematic_review.tex' and BibTeX 'references.bib' updated successfully!")
+print("LaTeX file 'systematic_review.tex' and BibTeX 'references.bib' generated successfully!")
+print("CSV/JSON files ready for marking papers for inclusion/exclusion.")
