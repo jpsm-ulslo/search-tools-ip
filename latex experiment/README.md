@@ -1,72 +1,93 @@
 Systematic Literature Search & LaTeX Report Generator
+Description
 
-Description:
-This repository contains the Python script wally.py, which performs automated literature searches on PubMed using the Entrez API, extracts metadata, and generates a reproducible LaTeX report with a PRISMA-style flow diagram and an evidence table.
+This repository contains the Python script wally.py which automates literature searches on PubMed using the Entrez API. It extracts metadata, generates a reproducible LaTeX report with a PRISMA-style flow diagram, and produces a synthesized evidence table with clickable DOI links.
 
-Features:
+Features
 
-- Search PubMed based on a customizable query, topic, and date range.
-- Extract metadata: title, authors, year, DOI, abstract.
-- Generate a .bib file for citations.
-- Produce a LaTeX report with:
-  - PRISMA flow diagram for screening and inclusion/exclusion
-  - Synthesized evidence table
-  - Clickable DOI links in the table
-- Export results to CSV or JSON for Excel or other analysis.
+Search PubMed based on a customizable query, topic, and date range.
 
-Installation:
+Extract metadata: Title, Authors, Year, DOI, Abstract.
 
-1. Clone the repository:
-   https://github.com/jpsm-ulslo/search-tools-ip/
-2. Install Python dependencies:
-   pip install biopython pandas
+Generate a .bib file for LaTeX citations.
 
-Usage:
+Produce a LaTeX report with:
 
-1. Edit the wally.py file to set your search parameters:
+PRISMA flow diagram for screening and inclusion/exclusion.
 
-   search_topic = "indirect calorimetry"
-   query = '"indirect calorimetry"[tiab] AND ("guideline"[tiab] OR "consensus"[tiab]) AND ("energy expenditure"[tiab] OR "resting energy expenditure"[tiab])'
-   date_from = "2015/01/01"
-   date_to = "2025/12/31"
+Synthesized evidence table.
 
-2. Run the script:
-   python wally.py
+Clickable DOI links in the table.
+
+Export results to CSV and JSON for Excel or further analysis.
+
+Include/Exclude workflow via CSV marking.
+
+Installation
+
+Clone the repository:
+git clone https://github.com/your-username/repository-name.git
+
+cd repository-name
+
+Install Python dependencies:
+pip install biopython pandas
+
+Usage
+
+Edit wally.py to set your search parameters:
+search_topic = "indirect calorimetry"
+query = '"indirect calorimetry"[tiab] AND ("guideline"[tiab] OR "consensus"[tiab]) AND ("energy expenditure"[tiab] OR "resting energy expenditure"[tiab])'
+date_from = "2015/01/01"
+date_to = "2025/12/31"
+
+Run the script:
+python wally.py
 
 Outputs:
 
-- systematic_review.tex → LaTeX report
-- references.bib → BibTeX file
-- records.csv → CSV file compatible with Excel
-- records.json → JSON file
+systematic_review.tex → LaTeX report
 
-Excel / CSV Considerations:
+references.bib → BibTeX file
 
-- records.csv is UTF-8 encoded, compatible with Excel in any language (including Portuguese from Portugal).
-- Columns include:
-  - Include → Mark 1 / Yes to include, 0 / No to exclude
-  - PMID → PubMed ID
-  - Title → Article title
-  - Authors → List of authors
-  - Year → Year of publication
-  - DOI → Digital Object Identifier
-  - Key → Unique BibTeX key
+records.csv → CSV file compatible with Excel
 
-> Note: Editing the Include column allows controlling which papers appear in the evidence table and PRISMA flow diagram. The script reads this column to update the LaTeX report.
+records.json → JSON file
 
-Customization & Reproducibility:
+Excel / CSV Considerations
 
-- Change search_topic, query, date_from, and date_to in wally.py to perform searches on different topics.
-- Modify LaTeX templates inside the script to adjust report styling or table formatting.
-- The CSV file allows easy marking of papers for inclusion/exclusion in subsequent runs, which updates the PRISMA flow diagram.
+records.csv is UTF-8 encoded, compatible with Excel in any language (including Portuguese from Portugal).
 
-Example:
+Columns include: Include, PMID, Title, Authors, Year, DOI, Key.
 
-1. Run wally.py.
-2. Open records.csv in Excel.
-3. Mark papers to include in the Include column.
-4. Rerun the script to regenerate the LaTeX report reflecting inclusion decisions.
+The Include column can be updated to 0 (exclude) or 1 (include). Re-running wally.py will update the LaTeX report and PRISMA flow diagram automatically.
 
-License:
+Customization & Reproducibility
+
+Change search_topic, query, date_from, and date_to in wally.py for different topics.
+
+Modify LaTeX templates inside the script to adjust report styling or table formatting.
+
+CSV marking allows flexible decision-making for which papers to include in the final synthesis.
+
+JSON export provides a reproducible machine-readable record of all results.
+
+Example Workflow
+
+Run wally.py to fetch PubMed results.
+
+Open records.csv in Excel.
+
+Mark papers to include (1) or exclude (0) in the Include column.
+
+Save the CSV and re-run wally.py to update:
+
+The PRISMA flow diagram in the LaTeX report.
+
+The synthesized evidence table.
+
+Clickable DOI links for included papers.
+
+License
 
 MIT License
