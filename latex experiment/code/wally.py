@@ -32,13 +32,14 @@ handle.close()
 pmid_list = record["IdList"]
 pubmed_total = int(record["Count"])
 duplicates = 0  # adjust if needed
-
-# Initial screening/exclusion placeholders
 screened = pubmed_total - duplicates
 excluded_screening = 0
 full_text = 0
 excluded_fulltext = 0
 included = 0
+
+print(f"PubMed total: {pubmed_total}")
+print(f"PMIDs: {pmid_list}")
 
 # ----------------------------
 # 4. Fetch metadata
@@ -76,29 +77,50 @@ if pmid_list:
 # ----------------------------
 with open("references.bib", "w", encoding="utf-8") as f:
     for rec in records_data:
-        f.write("@article{" + rec["Key"] + ",\n")
-        f.write("  author = {" + rec["Authors"] + "},\n")
-        f.write("  title = {" + rec["Title"] + "},\n")
+        f.write("@article{{{}}},\n".format(rec["Key"]))
+        f.write("  author = {{{}}},\n".format(rec["Authors"]))
+        f.write("  title = {{{}}},\n".format(rec["Title"]))
         f.write("  journal = {PubMed},\n")
-        f.write("  year = {" + rec["Year"] + "},\n")
+        f.write("  year = {{{}}},\n".format(rec["Year"]))
         if rec["DOI"]:
-            f.write("  doi = {" + rec["DOI"] + "},\n")
+            f.write("  doi = {{{}}},\n".format(rec["DOI"]))
         f.write("}\n\n")
 
 # ----------------------------
-# 6. Save CSV/JSON for Excel
+# 6. Save CSV/JSON for Excel with Include handling
 # ----------------------------
-records_df = pd.DataFrame(records_data)
-if not os.path.exists("records.csv"):
-    # Add Include column if CSV doesn't exist yet
+records_df_new = pd.DataFrame(records_data)
+records_csv_path = "records.csv"
+records_json_path = "records.json"
+
+if os.path.exists(records_csv_path):
+    # Read existing CSV (Include column preserved)
+    records_df_old = pd.read_csv(records_csv_path, sep=";", encoding="utf-8", dtype={"PMID": str})
+    records_df_new["PMID"] = records_df_new["PMID"].astype(str)
+    # Merge Include column from old CSV
+    if "Include" in records_df_old.columns:
+        records_df = pd.merge(
+            records_df_new,
+            records_df_old[["PMID", "Include"]],
+            on="PMID",
+            how="left"
+        )
+        records_df["Include"] = records_df["Include"].fillna(0).astype(int)
+    else:
+        records_df = records_df_new.copy()
+        records_df.insert(0, "Include", 0)
+else:
+    # First run
+    records_df = records_df_new.copy()
     records_df.insert(0, "Include", 0)
-records_df.to_csv("records.csv", index=False, sep=";", encoding="utf-8")
-records_df.to_json("records.json", orient="records", force_ascii=False)
+
+# Save updated CSV and JSON
+records_df.to_csv(records_csv_path, index=False, sep=";", encoding="utf-8")
+records_df.to_json(records_json_path, orient="records", force_ascii=False)
 
 # ----------------------------
-# 7. Read Include column for PRISMA counts
+# 7. PRISMA counts
 # ----------------------------
-records_df = pd.read_csv("records.csv", sep=";", encoding="utf-8")
 included = records_df["Include"].sum()
 excluded_fulltext = len(records_df) - included
 
