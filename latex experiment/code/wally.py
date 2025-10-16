@@ -82,7 +82,7 @@ if pmid_list:
 # ----------------------------
 with open("references.bib", "w", encoding="utf-8") as f:
     for rec in records_data:
-        f.write("@article{{{}}},\n".format(rec["Key"]))
+        f.write(f"@article{{{{{rec['Key']}}}}},\n")
         f.write("  author = {{{}}},\n".format(rec["Authors"]))
         f.write("  title = {{{}}},\n".format(rec["Title"]))
         f.write("  journal = {PubMed},\n")
